@@ -1,10 +1,13 @@
-package main.database;
+package database;
 
-import main.models.User;
+import models.PokemonLive;
+import models.User;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
 
 public class UserDAO {
 
@@ -47,5 +50,9 @@ public class UserDAO {
         } catch (SQLException e) {
             System.err.println("Error actualizando ELO: " + e.getMessage());
         }
+    }
+
+    public List<PokemonLive> getUserTeam(int userId) {
+        return new PokemonDAO().getTeamByUserId(userId);
     }
 }
