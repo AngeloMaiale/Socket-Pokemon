@@ -1,8 +1,6 @@
 package main.database;
 
-package com.tuusuario.pokemon.database;
-
-import com.tuusuario.pokemon.models.User;
+import main.models.User;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -10,7 +8,6 @@ import java.sql.SQLException;
 
 public class UserDAO {
 
-    // Método que el Dev 1 llamará cuando un cliente envíe sus credenciales
     public User authenticateUser(String username, String passwordHash) {
         String query = "SELECT id, username, elo_rating FROM Users WHERE username = ? AND password_hash = ?";
 
