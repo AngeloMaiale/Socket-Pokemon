@@ -1,5 +1,7 @@
 import database.DatabaseManager;
 import database.UserDAO;
+import database.PokemonDAO;
+import database.BattleDAO;
 import models.PokemonLive;
 import models.User;
 
@@ -79,5 +81,19 @@ public class Main {
                 }
             }
         }
+
+        System.out.println("\n=== Simulando acciones post-batalla ===");
+        PokemonDAO pokemonDAO = new PokemonDAO();
+        BattleDAO battleDAO = new BattleDAO();
+        PokemonLive primerPokemon = team.get(0);
+        System.out.println("Simulando que " + primerPokemon.getNickname() + " recibe 15 de daño y se paraliza...");
+        primerPokemon.setCurrentHp(primerPokemon.getCurrentHp() - 15);
+        primerPokemon.setStatus("Paralizado");
+        pokemonDAO.updatePokemonState(primerPokemon);
+        System.out.println("Estado guardado. Revisa pgAdmin para confirmar.");
+        System.out.println("Registrando victoria en el historial...");
+        battleDAO.recordBattleResult(user.getId(), 2, "Online");
+        System.out.println("Curando al equipo en el Centro Pokémon...");
+        pokemonDAO.healTeam(user.getId());
     }
 }

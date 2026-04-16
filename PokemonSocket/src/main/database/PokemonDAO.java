@@ -114,4 +114,33 @@ public class PokemonDAO {
                 rs.getString(categoryField)
         );
     }
+    public void updatePokemonState(PokemonLive pokemon) {
+        String query = "UPDATE equipo_pokemon SET current_hp = ?, estado = ? WHERE id_instancia = ?";
+
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setInt(1, pokemon.getCurrentHp());
+            pstmt.setString(2, pokemon.getStatus());
+            pstmt.setInt(3, pokemon.getId());
+
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Error actualizando estado del Pokémon: " + e.getMessage());
+        }
+    }
+
+    public void healTeam(int userId) {
+        String query = "UPDATE equipo_pokemon SET current_hp = NULL, estado = 'Normal' WHERE id_entrenador = ?";
+
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setInt(1, userId);
+            pstmt.executeUpdate();
+            System.out.println("✅ Equipo del usuario " + userId + " curado completamente.");
+        } catch (SQLException e) {
+            System.err.println("❌ Error curando al equipo: " + e.getMessage());
+        }
+    }
 }
