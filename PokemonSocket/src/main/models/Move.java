@@ -8,10 +8,11 @@ public class Move {
     private int accuracy;
     private int pp;
     private int currentPp;
+    private int priority;
     private String category;
 
     public Move(int id, String name, String type, int power, int accuracy,
-                int pp, int currentPp, String category) {
+                int pp, int currentPp, int priority, String category) {
         this.id = id;
         this.name = name;
         this.type = type;
@@ -19,6 +20,7 @@ public class Move {
         this.accuracy = accuracy;
         this.pp = pp;
         this.currentPp = currentPp;
+        this.priority = priority;
         this.category = category;
     }
 
@@ -48,6 +50,10 @@ public class Move {
 
     public int getCurrentPp() {
         return currentPp;
+    }
+
+    public int getPriority() {
+        return priority;
     }
 
     public String getCategory() {

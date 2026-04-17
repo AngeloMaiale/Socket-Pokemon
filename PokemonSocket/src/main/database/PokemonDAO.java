@@ -111,6 +111,7 @@ public class PokemonDAO {
                 rs.getInt(accuracyField),
                 rs.getInt(ppField),
                 rs.getInt(ppField),
+                0,
                 rs.getString(categoryField)
         );
     }
