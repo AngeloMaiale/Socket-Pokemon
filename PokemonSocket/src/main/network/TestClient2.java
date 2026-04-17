@@ -4,7 +4,7 @@ import java.io.*;
 import java.net.Socket;
 import java.util.Scanner;
 
-public class TestClient {
+public class TestClient2 {
     public static void main(String[] args) {
         String host = "localhost";
         int port = 1234;
@@ -32,7 +32,7 @@ public class TestClient {
                     System.out.println("Conexión cerrada por el servidor.");
                 }
             }).start();
-            String loginCommand = "LOGIN:Ash:clave123";
+            String loginCommand = "LOGIN:Misty:clave456";
             System.out.println("Enviando login automático: " + loginCommand);
             out.println(loginCommand);
             System.out.println("Puedes escribir comandos manuales mientras esperas.");

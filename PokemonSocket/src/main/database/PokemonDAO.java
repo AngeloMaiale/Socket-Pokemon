@@ -11,21 +11,39 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class PokemonDAO {
-    private static final String TEAM_QUERY = "SELECT tp.id, tp.pokedex_id, tp.nickname, tp.level, tp.current_hp, tp.iv_hp, tp.iv_attack, tp.iv_defense, tp.iv_speed, "
-            + "tp.ev_hp, tp.ev_attack, tp.ev_defense, tp.ev_speed, tp.status, "
-            + "p.type1, p.type2, p.base_hp, p.base_attack, p.base_defense, p.base_speed, "
-            + "m1.id AS move1_id, m1.name AS move1_name, m1.type AS move1_type, m1.power AS move1_power, m1.accuracy AS move1_accuracy, m1.pp AS move1_max_pp, tp.move1_pp AS move1_current_pp, m1.category AS move1_category, "
-            + "m2.id AS move2_id, m2.name AS move2_name, m2.type AS move2_type, m2.power AS move2_power, m2.accuracy AS move2_accuracy, m2.pp AS move2_max_pp, tp.move2_pp AS move2_current_pp, m2.category AS move2_category, "
-            + "m3.id AS move3_id, m3.name AS move3_name, m3.type AS move3_type, m3.power AS move3_power, m3.accuracy AS move3_accuracy, m3.pp AS move3_max_pp, tp.move3_pp AS move3_current_pp, m3.category AS move3_category, "
-            + "m4.id AS move4_id, m4.name AS move4_name, m4.type AS move4_type, m4.power AS move4_power, m4.accuracy AS move4_accuracy, m4.pp AS move4_max_pp, tp.move4_pp AS move4_current_pp, m4.category AS move4_category "
-            + "FROM TrainerPokemon tp "
-            + "JOIN Pokedex p ON tp.pokedex_id = p.id "
-            + "LEFT JOIN Moves m1 ON tp.move1_id = m1.id "
-            + "LEFT JOIN Moves m2 ON tp.move2_id = m2.id "
-            + "LEFT JOIN Moves m3 ON tp.move3_id = m3.id "
-            + "LEFT JOIN Moves m4 ON tp.move4_id = m4.id "
-            + "WHERE tp.user_id = ? "
-            + "ORDER BY tp.position";
+    private static final String TEAM_QUERY =
+            "SELECT " +
+                    "  ep.id_instancia AS id, ep.id_pokemon_especie AS pokedex_id, ep.apodo AS nickname, ep.nivel AS level, ep.current_hp, " +
+                    "  ep.ps_iv AS iv_hp, ep.ataque_iv AS iv_attack, ep.defensa_iv AS iv_defense, ep.velocidad_iv AS iv_speed, " +
+                    "  ep.ps_ev AS ev_hp, ep.ataque_ev AS ev_attack, ep.defensa_ev AS ev_defense, ep.velocidad_ev AS ev_speed, " +
+                    "  ep.estado AS status, p.nombre AS nombre_pokemon, eb.ps AS base_hp, eb.ataque AS base_attack, eb.defensa AS base_defense, eb.velocidad AS base_speed, " +
+                    "  t1.nombre AS type1, t2.nombre AS type2, " +
+
+                    "  m1.id_movimiento AS move1_id, m1.nombre AS move1_name, m1.id_tipo AS move1_type, m1.potencia AS move1_power, m1.precision AS move1_accuracy, m1.pp AS move1_max_pp, " +
+                    "  COALESCE(m1.pp, 0) AS move1_current_pp, m1.categoria AS move1_category, " +
+
+                    "  m2.id_movimiento AS move2_id, m2.nombre AS move2_name, m2.id_tipo AS move2_type, m2.potencia AS move2_power, m2.precision AS move2_accuracy, m2.pp AS move2_max_pp, " +
+                    "  COALESCE(m2.pp, 0) AS move2_current_pp, m2.categoria AS move2_category, " +
+
+                    "  m3.id_movimiento AS move3_id, m3.nombre AS move3_name, m3.id_tipo AS move3_type, m3.potencia AS move3_power, m3.precision AS move3_accuracy, m3.pp AS move3_max_pp, " +
+                    "  COALESCE(m3.pp, 0) AS move3_current_pp, m3.categoria AS move3_category, " +
+
+                    "  m4.id_movimiento AS move4_id, m4.nombre AS move4_name, m4.id_tipo AS move4_type, m4.potencia AS move4_power, m4.precision AS move4_accuracy, m4.pp AS move4_max_pp, " +
+                    "  COALESCE(m4.pp, 0) AS move4_current_pp, m4.categoria AS move4_category " +
+
+                    "FROM equipo_pokemon ep " +
+                    "JOIN pokemon p ON ep.id_pokemon_especie = p.id_pokemon " +
+                    "JOIN estadisticas_base eb ON ep.id_pokemon_especie = eb.id_pokemon " +
+                    "LEFT JOIN pokemon_tipos pt1 ON ep.id_pokemon_especie = pt1.id_pokemon AND pt1.es_principal = true " +
+                    "LEFT JOIN tipos t1 ON pt1.id_tipo = t1.id_tipo " +
+                    "LEFT JOIN pokemon_tipos pt2 ON ep.id_pokemon_especie = pt2.id_pokemon AND pt2.es_principal = false " +
+                    "LEFT JOIN tipos t2 ON pt2.id_tipo = t2.id_tipo " +
+                    "LEFT JOIN movimientos m1 ON ep.move1_id = m1.id_movimiento " +
+                    "LEFT JOIN movimientos m2 ON ep.move2_id = m2.id_movimiento " +
+                    "LEFT JOIN movimientos m3 ON ep.move3_id = m3.id_movimiento " +
+                    "LEFT JOIN movimientos m4 ON ep.move4_id = m4.id_movimiento " +
+                    "WHERE ep.id_entrenador = ? " +
+                    "ORDER BY ep.position";
 
     public List<PokemonLive> getTeamByUserId(int userId) {
         List<PokemonLive> team = new ArrayList<>();
