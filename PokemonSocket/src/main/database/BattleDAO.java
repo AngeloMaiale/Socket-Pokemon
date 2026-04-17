@@ -7,13 +7,13 @@ import java.sql.SQLException;
 public class BattleDAO {
 
     public void recordBattleResult(int winnerId, int loserId, String mode) {
-        String sql = "INSERT INTO combates (id_entrenador1, id_entrenador2, ganador_id) VALUES (?, ?, ?)";
-        try (Connection conn = database.DatabaseConnection.getConnection();
+        String sql = "INSERT INTO Battles (winner_id, loser_id, mode) VALUES (?, ?, ?)";
+        try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setInt(1, winnerId);
             pstmt.setInt(2, loserId);
-            pstmt.setInt(3, winnerId);
+            pstmt.setString(3, mode);
             pstmt.executeUpdate();
 
             System.out.println("[DB] Resultado guardado exitosamente.");

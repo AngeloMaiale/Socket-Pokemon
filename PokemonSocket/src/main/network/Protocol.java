@@ -9,6 +9,11 @@ public class Protocol {
     public static final String TYPE_END_BATTLE = "END_BATTLE";
     public static final String TYPE_ERROR = "ERROR";
 
+    public static final String LOGIN_SUCCESS = "LOGIN_SUCCESS";
+    public static final String LOGIN_FAIL = "LOGIN_FAIL";
+    public static final String TURN_REQUEST = "TURN_REQUEST";
+    public static final String SWITCH_REQUEST = "SWITCH_REQUEST";
+
     // Si tu BattleSession usa estos nombres, añádelos:
     public static final String RES_BATTLE_START = "BATTLE_START";
     public static final String RES_BATTLE_END = "BATTLE_END";

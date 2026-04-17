@@ -1,6 +1,8 @@
 package network;
 
+import database.UserDAO;
 import engine.BattleRoom;
+import models.Move;
 import models.PokemonLive;
 import models.User;
 import java.io.*;
@@ -15,6 +17,7 @@ public class ClientHandler implements Runnable {
     private User user; 
     private BattleRoom battleRoom; 
     private BattleSession battleSession; 
+    private boolean loggedIn = false;
     private String lastInput = null;
 
     public ClientHandler(Socket socket) {
@@ -45,7 +48,9 @@ public class ClientHandler implements Runnable {
         this.battleSession = battleSession;
     }
 
-    
+    public boolean isLoggedIn() {
+        return loggedIn;
+    }
 
     public void sendMessage(String message) {
         if (out != null) {
@@ -58,21 +63,52 @@ public class ClientHandler implements Runnable {
      * Requerido por la lógica de turnos de BattleRoom.
      */
     public synchronized Map<String, String> requestMoveSelection(PokemonLive activePokemon) {
-        sendMessage("SISTEMA: Es el turno de " + activePokemon.getNickname() + ". Elige ataque (ATTACK:0 o ATTACK:1)");
+        StringBuilder movesList = new StringBuilder("SISTEMA: Es el turno de ")
+                .append(activePokemon.getNickname()).append(". Movimientos:");
+        Move[] moves = activePokemon.getMoves();
+        if (moves != null) {
+            for (int i = 0; i < moves.length; i++) {
+                if (moves[i] != null) {
+                    movesList.append(" ").append(i).append("=").append(moves[i].getName())
+                            .append("(PP:").append(moves[i].getCurrentPp()).append("/").append(moves[i].getPp()).append(")");
+                }
+            }
+        }
+        movesList.append(". Elige ataque con ATTACK:indice");
+        sendMessage(Protocol.TURN_REQUEST + ":" + movesList.toString());
 
         lastInput = null;
-        while (lastInput == null) {
+        while (lastInput == null || !lastInput.startsWith("ATTACK:")) {
             try {
-                wait(); 
+                wait();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
         }
 
         Map<String, String> action = new HashMap<>();
-        
-        String moveIndex = lastInput.split(":")[1];
+        String[] parts = lastInput.split(":", 2);
+        String moveIndex = parts.length > 1 ? parts[1] : "0";
         action.put("move_index", moveIndex);
+        return action;
+    }
+
+    public synchronized Map<String, String> requestSwitchPokemon() {
+        sendMessage(Protocol.SWITCH_REQUEST + ":Elige índice de cambio (SWITCH:0-5)");
+
+        lastInput = null;
+        while (lastInput == null || !lastInput.startsWith("SWITCH:")) {
+            try {
+                wait();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        Map<String, String> action = new HashMap<>();
+        String[] parts = lastInput.split(":", 2);
+        String switchIndex = parts.length > 1 ? parts[1] : "0";
+        action.put("switch_index", switchIndex);
         return action;
     }
 
@@ -95,15 +131,31 @@ public class ClientHandler implements Runnable {
             String inputLine;
             while ((inputLine = in.readLine()) != null) {
                 
-                if (inputLine.startsWith("ATTACK:")) {
+                if (inputLine.startsWith("ATTACK:") || inputLine.startsWith("SWITCH:")) {
                     synchronized (this) {
                         this.lastInput = inputLine;
                         this.notifyAll();
                     }
-                }
-                
-                else if (inputLine.startsWith("LOGIN:")) {
-                    
+                } else if (inputLine.startsWith("LOGIN:")) {
+                    String[] parts = inputLine.split(":", 3);
+                    if (parts.length < 3) {
+                        sendMessage(Protocol.LOGIN_FAIL);
+                        closeConnection();
+                        break;
+                    }
+                    String username = parts[1];
+                    String passwordHash = parts[2];
+                    User authenticated = new UserDAO().authenticateUser(username, passwordHash);
+                    if (authenticated != null) {
+                        setUser(authenticated);
+                        loggedIn = true;
+                        sendMessage(Protocol.LOGIN_SUCCESS);
+                        Server.joinLobby(this);
+                    } else {
+                        sendMessage(Protocol.LOGIN_FAIL);
+                        closeConnection();
+                        break;
+                    }
                 }
             }
         } catch (IOException e) {

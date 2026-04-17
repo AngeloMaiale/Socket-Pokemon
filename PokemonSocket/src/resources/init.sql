@@ -51,6 +51,11 @@ CREATE TABLE IF NOT EXISTS TrainerPokemon (
     position INT CHECK (position BETWEEN 1 AND 6)
 );
 
+ALTER TABLE TrainerPokemon ADD COLUMN IF NOT EXISTS move1_pp INT DEFAULT 30;
+ALTER TABLE TrainerPokemon ADD COLUMN IF NOT EXISTS move2_pp INT DEFAULT 30;
+ALTER TABLE TrainerPokemon ADD COLUMN IF NOT EXISTS move3_pp INT DEFAULT 30;
+ALTER TABLE TrainerPokemon ADD COLUMN IF NOT EXISTS move4_pp INT DEFAULT 30;
+
 INSERT INTO Users (username, password_hash) VALUES ('Red', 'hash_password_aqui') ON CONFLICT DO NOTHING;
 INSERT INTO Pokedex (id, name, type1, type2, base_hp, base_attack, base_defense, base_speed)
 VALUES (25, 'Pikachu', 'Electric', NULL, 35, 55, 40, 90) ON CONFLICT DO NOTHING;
@@ -64,3 +69,11 @@ INSERT INTO TrainerPokemon (user_id, pokedex_id, nickname, level, iv_hp, iv_atta
 VALUES
 ((SELECT id FROM Users WHERE username = 'Red'), 25, 'Sparky', 5, 31, 31, 31, 31, 0, 0, 0, 0, 35, 'NONE', 1, 2, NULL, NULL, 1)
 ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS Battles (
+    id SERIAL PRIMARY KEY,
+    winner_id INT REFERENCES Users(id),
+    loser_id INT REFERENCES Users(id),
+    mode VARCHAR(20),
+    battle_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

@@ -1,5 +1,6 @@
 package network;
 
+import engine.BattleRoom;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -29,6 +30,11 @@ public class Server {
 
     
     public static synchronized void joinLobby(ClientHandler player) {
+        if (!player.isLoggedIn()) {
+            player.sendMessage("ERROR:LOGIN_REQUIRED");
+            return;
+        }
+
         waitingLobby.add(player);
         System.out.println(player.getUser().getUsername() + " ha entrado al lobby.");
 
@@ -37,8 +43,8 @@ public class Server {
             ClientHandler player2 = waitingLobby.remove(0);
 
             System.out.println("Emparejando a " + player1.getUser().getUsername() + " vs " + player2.getUser().getUsername());
-            BattleSession session = new BattleSession(player1, player2);
-            new Thread(session).start();
+            BattleRoom battleRoom = new BattleRoom(player1, player2);
+            new Thread(battleRoom).start();
         } else {
             player.sendMessage("WAITING_OPPONENT:Buscando partida...");
         }

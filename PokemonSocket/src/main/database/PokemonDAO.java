@@ -14,10 +14,10 @@ public class PokemonDAO {
     private static final String TEAM_QUERY = "SELECT tp.id, tp.pokedex_id, tp.nickname, tp.level, tp.current_hp, tp.iv_hp, tp.iv_attack, tp.iv_defense, tp.iv_speed, "
             + "tp.ev_hp, tp.ev_attack, tp.ev_defense, tp.ev_speed, tp.status, "
             + "p.type1, p.type2, p.base_hp, p.base_attack, p.base_defense, p.base_speed, "
-            + "m1.id AS move1_id, m1.name AS move1_name, m1.type AS move1_type, m1.power AS move1_power, m1.accuracy AS move1_accuracy, m1.pp AS move1_pp, m1.category AS move1_category, "
-            + "m2.id AS move2_id, m2.name AS move2_name, m2.type AS move2_type, m2.power AS move2_power, m2.accuracy AS move2_accuracy, m2.pp AS move2_pp, m2.category AS move2_category, "
-            + "m3.id AS move3_id, m3.name AS move3_name, m3.type AS move3_type, m3.power AS move3_power, m3.accuracy AS move3_accuracy, m3.pp AS move3_pp, m3.category AS move3_category, "
-            + "m4.id AS move4_id, m4.name AS move4_name, m4.type AS move4_type, m4.power AS move4_power, m4.accuracy AS move4_accuracy, m4.pp AS move4_pp, m4.category AS move4_category "
+            + "m1.id AS move1_id, m1.name AS move1_name, m1.type AS move1_type, m1.power AS move1_power, m1.accuracy AS move1_accuracy, m1.pp AS move1_max_pp, tp.move1_pp AS move1_current_pp, m1.category AS move1_category, "
+            + "m2.id AS move2_id, m2.name AS move2_name, m2.type AS move2_type, m2.power AS move2_power, m2.accuracy AS move2_accuracy, m2.pp AS move2_max_pp, tp.move2_pp AS move2_current_pp, m2.category AS move2_category, "
+            + "m3.id AS move3_id, m3.name AS move3_name, m3.type AS move3_type, m3.power AS move3_power, m3.accuracy AS move3_accuracy, m3.pp AS move3_max_pp, tp.move3_pp AS move3_current_pp, m3.category AS move3_category, "
+            + "m4.id AS move4_id, m4.name AS move4_name, m4.type AS move4_type, m4.power AS move4_power, m4.accuracy AS move4_accuracy, m4.pp AS move4_max_pp, tp.move4_pp AS move4_current_pp, m4.category AS move4_category "
             + "FROM TrainerPokemon tp "
             + "JOIN Pokedex p ON tp.pokedex_id = p.id "
             + "LEFT JOIN Moves m1 ON tp.move1_id = m1.id "
@@ -37,10 +37,10 @@ public class PokemonDAO {
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
                     Move[] moves = new Move[4];
-                    moves[0] = buildMove(rs, "move1_id", "move1_name", "move1_type", "move1_power", "move1_accuracy", "move1_pp", "move1_category");
-                    moves[1] = buildMove(rs, "move2_id", "move2_name", "move2_type", "move2_power", "move2_accuracy", "move2_pp", "move2_category");
-                    moves[2] = buildMove(rs, "move3_id", "move3_name", "move3_type", "move3_power", "move3_accuracy", "move3_pp", "move3_category");
-                    moves[3] = buildMove(rs, "move4_id", "move4_name", "move4_type", "move4_power", "move4_accuracy", "move4_pp", "move4_category");
+                    moves[0] = buildMove(rs, "move1_id", "move1_name", "move1_type", "move1_power", "move1_accuracy", "move1_max_pp", "move1_current_pp", "move1_category");
+                    moves[1] = buildMove(rs, "move2_id", "move2_name", "move2_type", "move2_power", "move2_accuracy", "move2_max_pp", "move2_current_pp", "move2_category");
+                    moves[2] = buildMove(rs, "move3_id", "move3_name", "move3_type", "move3_power", "move3_accuracy", "move3_max_pp", "move3_current_pp", "move3_category");
+                    moves[3] = buildMove(rs, "move4_id", "move4_name", "move4_type", "move4_power", "move4_accuracy", "move4_max_pp", "move4_current_pp", "move4_category");
 
                     int level = rs.getInt("level");
                     int ivHp = rs.getInt("iv_hp");
@@ -98,11 +98,17 @@ public class PokemonDAO {
     }
 
     private Move buildMove(ResultSet rs, String idField, String nameField, String typeField,
-                           String powerField, String accuracyField, String ppField, String categoryField)
+                           String powerField, String accuracyField, String maxPpField, String currentPpField, String categoryField)
             throws SQLException {
         Integer moveId = rs.getObject(idField, Integer.class);
         if (moveId == null) {
             return null;
+        }
+
+        int maxPp = rs.getInt(maxPpField);
+        int currentPp = rs.getInt(currentPpField);
+        if (rs.wasNull() || currentPp <= 0) {
+            currentPp = maxPp;
         }
 
         return new Move(
@@ -111,21 +117,25 @@ public class PokemonDAO {
                 rs.getString(typeField),
                 rs.getInt(powerField),
                 rs.getInt(accuracyField),
-                rs.getInt(ppField),
-                rs.getInt(ppField),
+                maxPp,
+                currentPp,
                 0,
                 rs.getString(categoryField)
         );
     }
     public void updatePokemonState(PokemonLive pokemon) {
-        String query = "UPDATE equipo_pokemon SET current_hp = ?, estado = ? WHERE id_instancia = ?";
+        String query = "UPDATE TrainerPokemon SET current_hp = ?, status = ?, move1_pp = ?, move2_pp = ?, move3_pp = ?, move4_pp = ? WHERE id = ?";
 
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
 
             pstmt.setInt(1, pokemon.getCurrentHp());
             pstmt.setString(2, pokemon.getStatus());
-            pstmt.setInt(3, pokemon.getId());
+            pstmt.setInt(3, pokemon.getMoves()[0] != null ? pokemon.getMoves()[0].getCurrentPp() : 0);
+            pstmt.setInt(4, pokemon.getMoves()[1] != null ? pokemon.getMoves()[1].getCurrentPp() : 0);
+            pstmt.setInt(5, pokemon.getMoves()[2] != null ? pokemon.getMoves()[2].getCurrentPp() : 0);
+            pstmt.setInt(6, pokemon.getMoves()[3] != null ? pokemon.getMoves()[3].getCurrentPp() : 0);
+            pstmt.setInt(7, pokemon.getId());
 
             pstmt.executeUpdate();
         } catch (SQLException e) {
@@ -134,13 +144,21 @@ public class PokemonDAO {
     }
 
     public void healTeam(int userId) {
-        String query = "UPDATE equipo_pokemon SET current_hp = NULL, estado = 'Normal' WHERE id_entrenador = ?";
+        String query = "UPDATE TrainerPokemon SET current_hp = NULL, status = 'NONE' WHERE user_id = ?";
 
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
 
             pstmt.setInt(1, userId);
             pstmt.executeUpdate();
+
+            List<PokemonLive> team = getTeamByUserId(userId);
+            for (PokemonLive pokemon : team) {
+                pokemon.setCurrentHp(pokemon.getMaxHp());
+                pokemon.setStatus("NONE");
+                updatePokemonState(pokemon);
+            }
+
             System.out.println("✅ Equipo del usuario " + userId + " curado completamente.");
         } catch (SQLException e) {
             System.err.println("❌ Error curando al equipo: " + e.getMessage());

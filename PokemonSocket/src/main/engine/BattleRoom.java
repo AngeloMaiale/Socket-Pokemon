@@ -1,6 +1,7 @@
 package engine;
 
 import database.BattleDAO;
+import database.PokemonDAO;
 import database.UserDAO;
 import models.Move;
 import models.PokemonLive;
@@ -20,6 +21,7 @@ public class BattleRoom implements Runnable {
     private User userB;
     private List<PokemonLive> teamA;
     private List<PokemonLive> teamB;
+    private final PokemonDAO pokemonDAO = new PokemonDAO();
 
     public BattleRoom(ClientHandler playerA, ClientHandler playerB) {
         this.playerA = playerA;
@@ -56,7 +58,24 @@ public class BattleRoom implements Runnable {
 
         sendBattleStart(activeA, activeB);
 
-        while (!activeA.isFainted() && !activeB.isFainted()) {
+        while (true) {
+            if (!hasAlivePokemon(teamA) || !hasAlivePokemon(teamB)) {
+                break;
+            }
+
+            if (activeA == null || activeA.isFainted()) {
+                activeA = promptSwitchPokemon(playerA, teamA);
+                if (activeA == null) break;
+            }
+            if (activeB == null || activeB.isFainted()) {
+                activeB = promptSwitchPokemon(playerB, teamB);
+                if (activeB == null) break;
+            }
+
+            if (activeA == null || activeB == null) {
+                break;
+            }
+
             Map<String, String> actionAData = playerA.requestMoveSelection(activeA);
             Map<String, String> actionBData = playerB.requestMoveSelection(activeB);
 
@@ -74,6 +93,49 @@ public class BattleRoom implements Runnable {
         }
 
         finalizeBattle(activeA, activeB);
+    }
+
+    private boolean hasAlivePokemon(List<PokemonLive> team) {
+        return team.stream().anyMatch(p -> p != null && !p.isFainted());
+    }
+
+    private PokemonLive promptSwitchPokemon(ClientHandler player, List<PokemonLive> team) {
+        if (!hasAlivePokemon(team)) {
+            return null;
+        }
+
+        player.sendMessage(Protocol.SWITCH_REQUEST + ":Elige índice de cambio (SWITCH:0-" + (team.size() - 1) + ")");
+        Map<String, String> action = player.requestSwitchPokemon();
+
+        int switchIndex;
+        try {
+            switchIndex = Integer.parseInt(action.getOrDefault("switch_index", "0"));
+        } catch (NumberFormatException e) {
+            switchIndex = 0;
+        }
+
+        if (switchIndex < 0 || switchIndex >= team.size()) {
+            switchIndex = 0;
+        }
+
+        PokemonLive selected = team.get(switchIndex);
+        if (selected == null || selected.isFainted()) {
+            for (PokemonLive pokemon : team) {
+                if (pokemon != null && !pokemon.isFainted()) {
+                    selected = pokemon;
+                    break;
+                }
+            }
+        }
+
+        if (selected == null || selected.isFainted()) {
+            return null;
+        }
+
+        Map<String, String> payload = new HashMap<>();
+        payload.put("activePokemon", selected.getDisplayName());
+        player.sendMessage(Protocol.createMessage(Protocol.SWITCH_REQUEST, payload));
+        return selected;
     }
 
     private boolean loadPlayers() {
@@ -143,8 +205,16 @@ public class BattleRoom implements Runnable {
             return;
         }
 
+        if (move.getCurrentPp() <= 0) {
+            sendActionUpdate(attacker, defender, 0, move.getName() + " no tiene PP.");
+            return;
+        }
+
         int damage = calculateDamage(move, attacker, defender);
+        move.setCurrentPp(move.getCurrentPp() - 1);
         defender.applyDamage(damage);
+        pokemonDAO.updatePokemonState(attacker);
+        pokemonDAO.updatePokemonState(defender);
         sendActionUpdate(attacker, defender, damage, move.getName());
     }
 
@@ -158,6 +228,13 @@ public class BattleRoom implements Runnable {
         if (defender.getType2() != null && !defender.getType2().isBlank()) {
             multiplier *= DamageCalculator.getTypeMultiplier(move.getType(), defender.getType2());
         }
+
+        if (move.getType() != null && (move.getType().equalsIgnoreCase(attacker.getType1()) || move.getType().equalsIgnoreCase(attacker.getType2()))) {
+            multiplier *= 1.5;
+        }
+
+        double randomFactor = 0.85 + Math.random() * 0.15;
+        multiplier *= randomFactor;
 
         double baseDamage = move.getPower();
         double attack = attacker.getAttack();
@@ -201,12 +278,15 @@ public class BattleRoom implements Runnable {
     private void finalizeBattle(PokemonLive activeA, PokemonLive activeB) {
         User winner;
         User loser;
-        if (activeA.isFainted() && !activeB.isFainted()) {
-            winner = userB;
-            loser = userA;
-        } else if (!activeA.isFainted() && activeB.isFainted()) {
+        boolean aliveA = hasAlivePokemon(teamA);
+        boolean aliveB = hasAlivePokemon(teamB);
+
+        if (aliveA && !aliveB) {
             winner = userA;
             loser = userB;
+        } else if (!aliveA && aliveB) {
+            winner = userB;
+            loser = userA;
         } else {
             winner = null;
             loser = null;

@@ -1,4 +1,4 @@
-package main.network;
+package network;
 
 import java.io.*;
 import java.net.Socket;
@@ -20,12 +20,22 @@ public class TestClient {
                     String response;
                     while ((response = in.readLine()) != null) {
                         System.out.println("\n[SERVIDOR]: " + response);
+                        if (response.startsWith(Protocol.LOGIN_SUCCESS)) {
+                            System.out.println("Login exitoso. Esperando batalla...");
+                        }
+                        if (response.startsWith(Protocol.TURN_REQUEST)) {
+                            System.out.println("Respuesta automática: enviando ATTACK:0");
+                            out.println("ATTACK:0");
+                        }
                     }
                 } catch (IOException e) {
                     System.out.println("Conexión cerrada por el servidor.");
                 }
             }).start();
-            System.out.println("Escribe el comando (Ej: LOGIN:Red:123456):");
+            String loginCommand = "LOGIN:Red:hash_password_aqui";
+            System.out.println("Enviando login automático: " + loginCommand);
+            out.println(loginCommand);
+            System.out.println("Puedes escribir comandos manuales mientras esperas.");
             while (scanner.hasNextLine()) {
                 String command = scanner.nextLine();
                 out.println(command);
