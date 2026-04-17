@@ -1,65 +1,46 @@
 package network;
 
-import engine.BattleRoom;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Server {
-    private final int port;
-    private final BlockingQueue<ClientHandler> waitingPlayers = new LinkedBlockingQueue<>();
-    private final ExecutorService executor = Executors.newCachedThreadPool();
-
-    public Server(int port) {
-        this.port = port;
-    }
-
-    public void start() {
-        try (ServerSocket serverSocket = new ServerSocket(port)) {
-            System.out.println("Servidor de Pokémon iniciado en el puerto " + port);
-            while (true) {
-                Socket clientSocket = serverSocket.accept();
-                ClientHandler handler = new ClientHandler(clientSocket, this);
-                executor.submit(handler);
-            }
-        } catch (IOException e) {
-            System.err.println("Error iniciando el servidor: " + e.getMessage());
-        } finally {
-            executor.shutdownNow();
-        }
-    }
-
-    public void queuePlayer(ClientHandler player) {
-        ClientHandler waiting = waitingPlayers.poll();
-        if (waiting == null) {
-            waitingPlayers.offer(player);
-            Map<String, String> payload = new HashMap<>();
-            payload.put("message", "Esperando rival...");
-            player.sendMessage(Protocol.createMessage(Protocol.TYPE_WAITING, payload));
-        } else {
-            BattleRoom room = new BattleRoom(waiting, player);
-            executor.submit(room);
-        }
-    }
-
-    public void removeWaiting(ClientHandler player) {
-        waitingPlayers.remove(player);
-    }
+    private static final int PORT = 1234;
+    private static List<ClientHandler> waitingLobby = new ArrayList<>();
 
     public static void main(String[] args) {
-        int port = 5000;
-        if (args.length > 0) {
-            try {
-                port = Integer.parseInt(args[0]);
-            } catch (NumberFormatException ignored) {
+        System.out.println("=== Iniciando Servidor de Batallas Pokémon ===");
+
+        try (ServerSocket serverSocket = new ServerSocket(PORT)) {
+            System.out.println("Servidor escuchando en el puerto: " + PORT);
+
+            while (true) {
+                Socket clientSocket = serverSocket.accept();
+                System.out.println("Nueva conexión entrante: " + clientSocket.getInetAddress());
+                ClientHandler clientHandler = new ClientHandler(clientSocket);
+                new Thread(clientHandler).start();
             }
+        } catch (IOException e) {
+            System.err.println("Error en el servidor: " + e.getMessage());
         }
-        new Server(port).start();
+    }
+
+    
+    public static synchronized void joinLobby(ClientHandler player) {
+        waitingLobby.add(player);
+        System.out.println(player.getUser().getUsername() + " ha entrado al lobby.");
+
+        if (waitingLobby.size() >= 2) {
+            ClientHandler player1 = waitingLobby.remove(0);
+            ClientHandler player2 = waitingLobby.remove(0);
+
+            System.out.println("Emparejando a " + player1.getUser().getUsername() + " vs " + player2.getUser().getUsername());
+            BattleSession session = new BattleSession(player1, player2);
+            new Thread(session).start();
+        } else {
+            player.sendMessage("WAITING_OPPONENT:Buscando partida...");
+        }
     }
 }

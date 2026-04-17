@@ -1,141 +1,115 @@
 package network;
 
-import database.UserDAO;
 import engine.BattleRoom;
 import models.PokemonLive;
 import models.User;
-
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.Socket;
 import java.util.HashMap;
 import java.util.Map;
 
 public class ClientHandler implements Runnable {
-    private final Socket socket;
-    private final Server server;
-    private BufferedReader reader;
-    private PrintWriter writer;
-    private User user;
-    private BattleRoom battleRoom;
-    private volatile boolean connected = true;
+    private Socket socket;
+    private PrintWriter out;
+    private BufferedReader in;
+    private User user; 
+    private BattleRoom battleRoom; 
+    private BattleSession battleSession; 
+    private String lastInput = null;
 
-    public ClientHandler(Socket socket, Server server) {
-        this.socket = socket;
-        this.server = server;
-    }
-
-    @Override
-    public void run() {
+    public ClientHandler(Socket socket) {
         try {
-            reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            writer = new PrintWriter(socket.getOutputStream(), true);
-            handleHandshake();
+            this.socket = socket;
+            this.out = new PrintWriter(socket.getOutputStream(), true);
+            this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         } catch (IOException e) {
-            closeConnection();
+            System.err.println("Error al inicializar ClientHandler: " + e.getMessage());
         }
     }
 
-    private void handleHandshake() {
-        try {
-            Protocol.Message message = readMessage();
-            if (message == null || !Protocol.TYPE_HANDSHAKE.equals(message.getType())) {
-                sendError("Handshake inválido.");
-                closeConnection();
-                return;
-            }
+    
 
-            String username = message.getPayload().get("username");
-            String passwordHash = message.getPayload().get("password_hash");
-            if (username == null || passwordHash == null) {
-                sendError("Credenciales incompletas.");
-                closeConnection();
-                return;
-            }
+    public User getUser() {
+        return this.user;
+    }
 
-            UserDAO userDAO = new UserDAO();
-            User authenticated = userDAO.authenticateUser(username, passwordHash);
-            if (authenticated == null) {
-                sendError("Autenticación fallida.");
-                closeConnection();
-                return;
-            }
-
-            this.user = authenticated;
-            Map<String, String> payload = new HashMap<>();
-            payload.put("message", "Autenticación exitosa.");
-            payload.put("username", user.getUsername());
-            sendMessage(Protocol.createMessage(Protocol.TYPE_MATCHMADE, payload));
-            server.queuePlayer(this);
-        } catch (IOException e) {
-            closeConnection();
-        }
+    public void setUser(User user) {
+        this.user = user;
     }
 
     public void setBattleRoom(BattleRoom battleRoom) {
         this.battleRoom = battleRoom;
     }
 
-    public User getUser() {
-        return user;
+    public void setBattleSession(BattleSession battleSession) {
+        this.battleSession = battleSession;
     }
 
-    public Protocol.Message readMessage() throws IOException {
-        String raw = reader.readLine();
-        if (raw == null) {
-            throw new IOException("Conexión cerrada por el cliente.");
-        }
-        return Protocol.parseMessage(raw);
-    }
+    
 
-    public void sendMessage(String rawMessage) {
-        if (writer != null && !socket.isClosed()) {
-            writer.println(rawMessage);
+    public void sendMessage(String message) {
+        if (out != null) {
+            out.println(message);
         }
     }
 
-    public void sendError(String message) {
-        Map<String, String> payload = new HashMap<>();
-        payload.put("message", message);
-        sendMessage(Protocol.createMessage(Protocol.TYPE_ERROR, payload));
-    }
+    /**
+     * Pausa el hilo de la batalla hasta que este cliente envíe un movimiento.
+     * Requerido por la lógica de turnos de BattleRoom.
+     */
+    public synchronized Map<String, String> requestMoveSelection(PokemonLive activePokemon) {
+        sendMessage("SISTEMA: Es el turno de " + activePokemon.getNickname() + ". Elige ataque (ATTACK:0 o ATTACK:1)");
 
-    public Map<String, String> requestMoveSelection(PokemonLive activePokemon) {
-        Map<String, String> payload = new HashMap<>();
-        payload.put("pokemon", activePokemon.getDisplayName());
-        payload.put("hp", Integer.toString(activePokemon.getCurrentHp()));
-        sendMessage(Protocol.createMessage(Protocol.TYPE_REQUEST_MOVE, payload));
-
-        try {
-            Protocol.Message response = readMessage();
-            if (response == null || !Protocol.TYPE_SEND_MOVE.equals(response.getType())) {
-                Map<String, String> fallback = new HashMap<>();
-                fallback.put("move_index", "0");
-                return fallback;
+        lastInput = null;
+        while (lastInput == null) {
+            try {
+                wait(); 
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
-            return response.getPayload();
-        } catch (IOException e) {
-            closeConnection();
-            Map<String, String> fallback = new HashMap<>();
-            fallback.put("move_index", "0");
-            return fallback;
         }
+
+        Map<String, String> action = new HashMap<>();
+        
+        String moveIndex = lastInput.split(":")[1];
+        action.put("move_index", moveIndex);
+        return action;
     }
 
     public void closeConnection() {
-        connected = false;
-        server.removeWaiting(this);
         try {
-            if (socket != null && !socket.isClosed()) {
-                socket.close();
-            }
-        } catch (IOException ignored) {
+            if (in != null) in.close();
+            if (out != null) out.close();
+            if (socket != null) socket.close();
+            System.out.println("Conexión cerrada para el usuario: " + (user != null ? user.getUsername() : "Desconocido"));
+        } catch (IOException e) {
+            System.err.println("Error al cerrar conexión: " + e.getMessage());
         }
     }
 
-    public boolean isConnected() {
-        return connected && socket != null && !socket.isClosed();
+    
+
+    @Override
+    public void run() {
+        try {
+            String inputLine;
+            while ((inputLine = in.readLine()) != null) {
+                
+                if (inputLine.startsWith("ATTACK:")) {
+                    synchronized (this) {
+                        this.lastInput = inputLine;
+                        this.notifyAll();
+                    }
+                }
+                
+                else if (inputLine.startsWith("LOGIN:")) {
+                    
+                }
+            }
+        } catch (IOException e) {
+            System.out.println("El cliente se ha desconectado de forma abrupta.");
+        } finally {
+            closeConnection();
+        }
     }
 }

@@ -11,7 +11,7 @@ import models.PokemonLive;
 
 public final class TurnManager {
     private TurnManager() {
-        // Utility class
+        
     }
 
     public static final class TurnAction {
