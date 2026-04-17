@@ -77,12 +77,19 @@ public class ClientHandler implements Runnable {
         movesList.append(". Elige ataque con ATTACK:indice");
         sendMessage(Protocol.TURN_REQUEST + ":" + movesList.toString());
 
+        final long timeout = 30000;
+        long deadline = System.currentTimeMillis() + timeout;
         lastInput = null;
         while (lastInput == null || !lastInput.startsWith("ATTACK:")) {
+            long remaining = deadline - System.currentTimeMillis();
+            if (remaining <= 0) {
+                return null;
+            }
             try {
-                wait();
+                wait(remaining);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                return null;
             }
         }
 
@@ -96,12 +103,19 @@ public class ClientHandler implements Runnable {
     public synchronized Map<String, String> requestSwitchPokemon() {
         sendMessage(Protocol.SWITCH_REQUEST + ":Elige índice de cambio (SWITCH:0-5)");
 
+        final long timeout = 30000;
+        long deadline = System.currentTimeMillis() + timeout;
         lastInput = null;
         while (lastInput == null || !lastInput.startsWith("SWITCH:")) {
+            long remaining = deadline - System.currentTimeMillis();
+            if (remaining <= 0) {
+                return null;
+            }
             try {
-                wait();
+                wait(remaining);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                return null;
             }
         }
 

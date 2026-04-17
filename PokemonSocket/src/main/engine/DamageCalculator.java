@@ -2,6 +2,7 @@ package engine;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class DamageCalculator {
     private static final String[] TYPES = {
@@ -156,5 +157,14 @@ public class DamageCalculator {
             return 1.0; 
         }
         return TYPE_CHART[attackIndex][defenseIndex];
+    }
+
+    public static boolean isCriticalHit() {
+        return ThreadLocalRandom.current().nextDouble() < 0.0625;
+    }
+
+    public static int calculateDamage(int level, int power, int attack, int defense, double modifier) {
+        double base = Math.floor(Math.floor(Math.floor((2.0 * level / 5.0 + 2.0) * power * attack / defense) / 50.0) + 2.0);
+        return (int) Math.max(1, Math.floor(base * modifier));
     }
 }

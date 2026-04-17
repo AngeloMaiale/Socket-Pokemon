@@ -105,6 +105,52 @@ public class PokemonLive {
         this.moves = moves;
     }
 
+    public boolean canAct() {
+        if (status == null || status.isBlank() || status.equalsIgnoreCase("NONE")) {
+            return true;
+        }
+
+        switch (status.trim().toUpperCase()) {
+            case "DORMIDO":
+            case "ASLEEP":
+            case "CONGELADO":
+            case "FROZEN":
+                return false;
+            case "PARALIZADO":
+            case "PARALYZED":
+                return Math.random() >= 0.25;
+            case "ENAMORADO":
+            case "INFATUATED":
+                return Math.random() >= 0.5;
+            default:
+                return true;
+        }
+    }
+
+    public void applyStatusDamage() {
+        if (status == null || status.isBlank() || status.equalsIgnoreCase("NONE") || isFainted()) {
+            return;
+        }
+
+        int damage = 0;
+        switch (status.trim().toUpperCase()) {
+            case "QUEMADO":
+            case "BURNED":
+                damage = Math.max(1, maxHp / 8);
+                break;
+            case "ENVENENADO":
+            case "POISONED":
+                damage = Math.max(1, maxHp / 8);
+                break;
+            default:
+                break;
+        }
+
+        if (damage > 0) {
+            currentHp = Math.max(0, currentHp - damage);
+        }
+    }
+
     public boolean isFainted() {
         return currentHp <= 0;
     }

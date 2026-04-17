@@ -13,8 +13,11 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class BattleRoom implements Runnable {
+    private static final long ACTION_TIMEOUT_MS = 30000;
+
     private final ClientHandler playerA;
     private final ClientHandler playerB;
     private User userA;
@@ -22,6 +25,7 @@ public class BattleRoom implements Runnable {
     private List<PokemonLive> teamA;
     private List<PokemonLive> teamB;
     private final PokemonDAO pokemonDAO = new PokemonDAO();
+    private boolean battleAborted = false;
 
     public BattleRoom(ClientHandler playerA, ClientHandler playerB) {
         this.playerA = playerA;
@@ -64,11 +68,13 @@ public class BattleRoom implements Runnable {
             }
 
             if (activeA == null || activeA.isFainted()) {
-                activeA = promptSwitchPokemon(playerA, teamA);
+                activeA = promptSwitchPokemon(playerA, playerB, teamA);
+                if (battleAborted) return;
                 if (activeA == null) break;
             }
             if (activeB == null || activeB.isFainted()) {
-                activeB = promptSwitchPokemon(playerB, teamB);
+                activeB = promptSwitchPokemon(playerB, playerA, teamB);
+                if (battleAborted) return;
                 if (activeB == null) break;
             }
 
@@ -77,7 +83,16 @@ public class BattleRoom implements Runnable {
             }
 
             Map<String, String> actionAData = playerA.requestMoveSelection(activeA);
+            if (actionAData == null) {
+                handleTimeoutForfeit(playerA, playerB);
+                return;
+            }
+
             Map<String, String> actionBData = playerB.requestMoveSelection(activeB);
+            if (actionBData == null) {
+                handleTimeoutForfeit(playerB, playerA);
+                return;
+            }
 
             TurnManager.TurnAction actionA = buildTurnAction(playerA.getUser(), activeA, actionAData);
             TurnManager.TurnAction actionB = buildTurnAction(playerB.getUser(), activeB, actionBData);
@@ -90,6 +105,22 @@ public class BattleRoom implements Runnable {
                 }
                 executeAction(action, activeA, activeB);
             }
+
+            applyStatusDamage(activeA, playerA);
+            applyStatusDamage(activeB, playerB);
+
+            if (activeA.isFainted()) {
+                activeA = promptSwitchPokemon(playerA, playerB, teamA);
+                if (battleAborted || activeA == null) return;
+            }
+            if (activeB.isFainted()) {
+                activeB = promptSwitchPokemon(playerB, playerA, teamB);
+                if (battleAborted || activeB == null) return;
+            }
+
+            if (activeA == null || activeB == null) {
+                break;
+            }
         }
 
         finalizeBattle(activeA, activeB);
@@ -99,13 +130,17 @@ public class BattleRoom implements Runnable {
         return team.stream().anyMatch(p -> p != null && !p.isFainted());
     }
 
-    private PokemonLive promptSwitchPokemon(ClientHandler player, List<PokemonLive> team) {
+    private PokemonLive promptSwitchPokemon(ClientHandler player, ClientHandler opponent, List<PokemonLive> team) {
         if (!hasAlivePokemon(team)) {
             return null;
         }
 
         player.sendMessage(Protocol.SWITCH_REQUEST + ":Elige índice de cambio (SWITCH:0-" + (team.size() - 1) + ")");
         Map<String, String> action = player.requestSwitchPokemon();
+        if (action == null) {
+            handleTimeoutForfeit(player, opponent);
+            return null;
+        }
 
         int switchIndex;
         try {
@@ -205,14 +240,34 @@ public class BattleRoom implements Runnable {
             return;
         }
 
+        if (!attacker.canAct()) {
+            sendActionUpdate(attacker, defender, 0, attacker.getDisplayName() + " no puede moverse!");
+            return;
+        }
+
         if (move.getCurrentPp() <= 0) {
             sendActionUpdate(attacker, defender, 0, move.getName() + " no tiene PP.");
             return;
         }
 
-        int damage = calculateDamage(move, attacker, defender);
+        if (!isMoveSuccessful(move, attacker, defender)) {
+            move.setCurrentPp(move.getCurrentPp() - 1);
+            pokemonDAO.updatePokemonState(attacker);
+            sendActionUpdate(attacker, defender, 0, move.getName() + " falló!");
+            return;
+        }
+
+        boolean isStatusMove = move.getPower() <= 0 || "STATUS".equalsIgnoreCase(move.getCategory());
+        int damage = 0;
+
         move.setCurrentPp(move.getCurrentPp() - 1);
-        defender.applyDamage(damage);
+        if (!isStatusMove) {
+            damage = calculateDamage(move, attacker, defender);
+            defender.applyDamage(damage);
+        } else {
+            applyStatusEffect(move, defender);
+        }
+
         pokemonDAO.updatePokemonState(attacker);
         pokemonDAO.updatePokemonState(defender);
         sendActionUpdate(attacker, defender, damage, move.getName());
@@ -220,6 +275,10 @@ public class BattleRoom implements Runnable {
 
     private int calculateDamage(Move move, PokemonLive attacker, PokemonLive defender) {
         if (move == null || attacker == null || defender == null) {
+            return 0;
+        }
+
+        if (move.getPower() <= 0 || "STATUS".equalsIgnoreCase(move.getCategory())) {
             return 0;
         }
 
@@ -233,14 +292,14 @@ public class BattleRoom implements Runnable {
             multiplier *= 1.5;
         }
 
+        if (DamageCalculator.isCriticalHit()) {
+            multiplier *= 1.5;
+        }
+
         double randomFactor = 0.85 + Math.random() * 0.15;
         multiplier *= randomFactor;
 
-        double baseDamage = move.getPower();
-        double attack = attacker.getAttack();
-        double defense = Math.max(defender.getDefense(), 1);
-        int damage = (int) Math.max(1, Math.floor((baseDamage * attack / defense) * multiplier));
-        return damage;
+        return DamageCalculator.calculateDamage(attacker.getLevel(), move.getPower(), attacker.getAttack(), Math.max(defender.getDefense(), 1), multiplier);
     }
 
     private void sendActionUpdate(PokemonLive attacker, PokemonLive defender, int damage, String moveName) {
@@ -309,6 +368,85 @@ public class BattleRoom implements Runnable {
         payload.put("loser", loserName);
         playerA.sendMessage(Protocol.createMessage(Protocol.TYPE_END_BATTLE, payload));
         playerB.sendMessage(Protocol.createMessage(Protocol.TYPE_END_BATTLE, payload));
+    }
+
+    private void handleTimeoutForfeit(ClientHandler timedOutPlayer, ClientHandler opponent) {
+        if (timedOutPlayer == null || opponent == null) {
+            return;
+        }
+        sendErrorToPlayers("El oponente no respondió a tiempo. Fin de batalla.");
+        battleAborted = true;
+
+        User winner = opponent.getUser();
+        User loser = timedOutPlayer.getUser();
+        if (winner != null && loser != null) {
+            BattleDAO battleDAO = new BattleDAO();
+            battleDAO.recordBattleResult(winner.getId(), loser.getId(), "Timeout");
+            new UserDAO().updateElo(winner.getId(), winner.getEloRating() + 15, true);
+            new UserDAO().updateElo(loser.getId(), loser.getEloRating() - 10, false);
+        }
+        sendBattleEnd(opponent.getUser().getUsername(), timedOutPlayer.getUser().getUsername());
+    }
+
+    private void applyStatusDamage(PokemonLive pokemon, ClientHandler player) {
+        if (pokemon == null || player == null) {
+            return;
+        }
+
+        int priorHp = pokemon.getCurrentHp();
+        pokemon.applyStatusDamage();
+
+        if (pokemon.getCurrentHp() < priorHp) {
+            pokemonDAO.updatePokemonState(pokemon);
+            sendActionUpdate(pokemon, pokemon, priorHp - pokemon.getCurrentHp(), "Daño por estado: " + pokemon.getStatus());
+        }
+    }
+
+    private boolean isMoveSuccessful(Move move, PokemonLive attacker, PokemonLive defender) {
+        if (move == null || move.getAccuracy() <= 0) {
+            return true;
+        }
+        int roll = ThreadLocalRandom.current().nextInt(1, 101);
+        return roll <= move.getAccuracy();
+    }
+
+    private void applyStatusEffect(Move move, PokemonLive target) {
+        if (move == null || target == null || target.isFainted()) {
+            return;
+        }
+
+        if (target.getStatus() != null && !target.getStatus().isBlank() && !target.getStatus().equalsIgnoreCase("NONE")) {
+            return;
+        }
+
+        String name = move.getName();
+        if (name == null) {
+            return;
+        }
+
+        String normalized = name.trim().toUpperCase();
+        switch (normalized) {
+            case "THUNDER WAVE":
+            case "THUNDERWAVE":
+                target.setStatus("PARALYZED");
+                break;
+            case "TOXIC":
+                target.setStatus("POISONED");
+                break;
+            case "WILL O WISP":
+            case "WILLOWISP":
+                target.setStatus("BURNED");
+                break;
+            default:
+                break;
+        }
+    }
+
+    private boolean canAct(PokemonLive pokemon) {
+        if (pokemon == null) {
+            return false;
+        }
+        return pokemon.canAct();
     }
 
     private void sendErrorToPlayers(String message) {
