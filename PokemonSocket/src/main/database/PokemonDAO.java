@@ -13,7 +13,7 @@ import java.util.List;
 public class PokemonDAO {
     private static final String TEAM_QUERY = "SELECT tp.id, tp.pokedex_id, tp.nickname, tp.level, tp.current_hp, tp.iv_hp, tp.iv_attack, tp.iv_defense, tp.iv_speed, "
             + "tp.ev_hp, tp.ev_attack, tp.ev_defense, tp.ev_speed, tp.status, "
-            + "p.base_hp, p.base_attack, p.base_defense, p.base_speed, "
+            + "p.type1, p.type2, p.base_hp, p.base_attack, p.base_defense, p.base_speed, "
             + "m1.id AS move1_id, m1.name AS move1_name, m1.type AS move1_type, m1.power AS move1_power, m1.accuracy AS move1_accuracy, m1.pp AS move1_pp, m1.category AS move1_category, "
             + "m2.id AS move2_id, m2.name AS move2_name, m2.type AS move2_type, m2.power AS move2_power, m2.accuracy AS move2_accuracy, m2.pp AS move2_pp, m2.category AS move2_category, "
             + "m3.id AS move3_id, m3.name AS move3_name, m3.type AS move3_type, m3.power AS move3_power, m3.accuracy AS move3_accuracy, m3.pp AS move3_pp, m3.category AS move3_category, "
@@ -82,6 +82,8 @@ public class PokemonDAO {
                             attack,
                             defense,
                             speed,
+                            rs.getString("type1"),
+                            rs.getString("type2"),
                             moves,
                             status
                     );
